@@ -23,23 +23,27 @@ public protocol IssuanceRequesterType {
   
   func placeIssuanceRequest(
     accessToken: IssuanceAccessToken,
-    request: SingleCredential
+    request: SingleCredential,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<CredentialIssuanceResponse, Error>
   
   func placeBatchIssuanceRequest(
     accessToken: IssuanceAccessToken,
-    request: [SingleCredential]
+    request: [SingleCredential],
+    dpopNonce: DPopNonce?
   ) async throws -> Result<CredentialIssuanceResponse, Error>
   
   func placeDeferredCredentialRequest(
     accessToken: IssuanceAccessToken,
     transactionId: TransactionId,
-    issuanceResponseEncryptionSpec: IssuanceResponseEncryptionSpec?
+    issuanceResponseEncryptionSpec: IssuanceResponseEncryptionSpec?,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<DeferredCredentialIssuanceResponse, Error>
   
   func notifyIssuer(
     accessToken: IssuanceAccessToken?,
-    notification: NotificationObject
+    notification: NotificationObject,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<Void, Error>
 }
 
@@ -64,19 +68,21 @@ public actor IssuanceRequester: IssuanceRequesterType {
   
   public func placeIssuanceRequest(
     accessToken: IssuanceAccessToken,
-    request: SingleCredential
+    request: SingleCredential,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<CredentialIssuanceResponse, Error> {
     let endpoint = issuerMetadata.credentialEndpoint.url
     
     do {
       let authorizationHeader: [String: String] = try accessToken.dPoPOrBearerAuthorizationHeader(
         dpopConstructor: dpopConstructor,
-        endpoint: endpoint
+        endpoint: endpoint,
+        dpopNonce: dpopNonce
       )
       
       let encodedRequest: [String: Any] = try request.toDictionary().dictionaryValue
       
-      let response: SingleIssuanceSuccessResponse = try await service.formPost(
+        let (response, urlResponse): (SingleIssuanceSuccessResponse, URLResponse) = try await service.formPost(
         poster: poster,
         url: endpoint,
         headers: authorizationHeader,
@@ -183,7 +189,8 @@ public actor IssuanceRequester: IssuanceRequesterType {
   
   public func placeBatchIssuanceRequest(
     accessToken: IssuanceAccessToken,
-    request: [SingleCredential]
+    request: [SingleCredential],
+    dpopNonce: DPopNonce?
   ) async throws -> Result<CredentialIssuanceResponse, Error> {
     guard
       let endpoint = issuerMetadata.batchCredentialEndpoint?.url
@@ -194,7 +201,8 @@ public actor IssuanceRequester: IssuanceRequesterType {
     do {
       let authorizationHeader: [String: Any] = try accessToken.dPoPOrBearerAuthorizationHeader(
         dpopConstructor: dpopConstructor,
-        endpoint: endpoint
+        endpoint: endpoint,
+        dpopNonce: dpopNonce
       )
       
       let encodedRequest: [JSON] = try request
@@ -202,7 +210,7 @@ public actor IssuanceRequester: IssuanceRequesterType {
 
       let merged = authorizationHeader.merging(["credential_requests": encodedRequest]) { (_, new) in new }
       
-      let response: BatchIssuanceSuccessResponse = try await service.formPost(
+        let (response, urlResponse): (BatchIssuanceSuccessResponse, URLResponse) = try await service.formPost(
         poster: poster,
         url: endpoint,
         headers: [:],
@@ -218,7 +226,8 @@ public actor IssuanceRequester: IssuanceRequesterType {
   public func placeDeferredCredentialRequest(
     accessToken: IssuanceAccessToken,
     transactionId: TransactionId,
-    issuanceResponseEncryptionSpec: IssuanceResponseEncryptionSpec?
+    issuanceResponseEncryptionSpec: IssuanceResponseEncryptionSpec?,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<DeferredCredentialIssuanceResponse, Error> {
     guard let deferredCredentialEndpoint = issuerMetadata.deferredCredentialEndpoint else {
       throw CredentialError.issuerDoesNotSupportDeferredIssuance
@@ -226,13 +235,14 @@ public actor IssuanceRequester: IssuanceRequesterType {
     
     let authorizationHeader: [String: String] = try accessToken.dPoPOrBearerAuthorizationHeader(
       dpopConstructor: dpopConstructor,
-      endpoint: deferredCredentialEndpoint.url
+      endpoint: deferredCredentialEndpoint.url,
+      dpopNonce: dpopNonce
     )
     
     let encodedRequest: [String: Any] = try JSON(transactionId.toDeferredRequestTO().toDictionary()).dictionaryValue
     
     do {
-      let response: DeferredCredentialIssuanceResponse = try await service.formPost(
+        let (response, urlResponse): (DeferredCredentialIssuanceResponse, URLResponse) = try await service.formPost(
         poster: poster,
         url: deferredCredentialEndpoint.url,
         headers: authorizationHeader,
@@ -275,7 +285,8 @@ public actor IssuanceRequester: IssuanceRequesterType {
   
   public func notifyIssuer(
     accessToken: IssuanceAccessToken?,
-    notification: NotificationObject
+    notification: NotificationObject,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<Void, Error> {
     do {
       
@@ -290,7 +301,8 @@ public actor IssuanceRequester: IssuanceRequesterType {
       let endpoint = notificationEndpoint.url
       let authorizationHeader: [String: String] = try accessToken.dPoPOrBearerAuthorizationHeader(
         dpopConstructor: dpopConstructor,
-        endpoint: endpoint
+        endpoint: endpoint,
+        dpopNonce: dpopNonce
       )
       
       let payload = NotificationObject(
@@ -301,7 +313,7 @@ public actor IssuanceRequester: IssuanceRequesterType {
       let encodedRequest: [String: Any] = JSON(payload.toDictionary()).dictionaryValue
       
       do {
-        let _: EmptyResponse = try await service.formPost(
+          let (_, _): (EmptyResponse, URLResponse) = try await service.formPost(
           poster: poster,
           url: endpoint,
           headers: authorizationHeader,

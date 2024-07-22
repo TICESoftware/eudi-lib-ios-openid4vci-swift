@@ -48,6 +48,7 @@ public enum AuthorizedRequest {
     cNonce: CNonce,
     credentialIdentifiers: AuthorizationDetailsIdentifiers?,
     timeStamp: TimeInterval
+    dpopNonce: DPopNonce? = nil
   )
     
   public func isAccessTokenExpired(clock: TimeInterval) -> Bool {
@@ -93,6 +94,15 @@ public enum AuthorizedRequest {
       return accessToken
     }
   }
+    
+    public var dpopNonce: DPopNonce? {
+        switch self {
+        case .noProofRequired:
+            return nil
+        case .proofRequired(_, _, _, _, let dpopNonce):
+            return dpopNonce
+        }
+    }
 }
 
 public extension AuthorizedRequest {

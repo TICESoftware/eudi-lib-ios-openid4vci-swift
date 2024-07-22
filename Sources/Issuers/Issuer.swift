@@ -16,6 +16,8 @@
 import Foundation
 import JOSESwift
 
+public typealias DPopNonce = String
+
 public protocol IssuerType {
   
   func pushAuthorizationCodeRequest(
@@ -35,7 +37,8 @@ public protocol IssuerType {
   ) async -> Result<UnauthorizedRequest, Error>
   
   func requestAccessToken(
-    authorizationCode: UnauthorizedRequest
+    authorizationCode: UnauthorizedRequest, 
+    nonce: String?
   ) async -> Result<AuthorizedRequest, Error>
   
   func requestSingle(
@@ -53,12 +56,14 @@ public protocol IssuerType {
   
   func requestDeferredIssuance(
     proofRequest: AuthorizedRequest,
-    transactionId: TransactionId
+    transactionId: TransactionId,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<DeferredCredentialIssuanceResponse, Error>
   
   func notify(
     authorizedRequest: AuthorizedRequest,
-    notificationId: NotificationObject
+    notificationId: NotificationObject,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<Void, Error>
   
   func requestBatch(
@@ -275,7 +280,7 @@ public actor Issuer: IssuerType {
     }
   }
   
-  public func requestAccessToken(authorizationCode: UnauthorizedRequest) async -> Result<AuthorizedRequest, Error> {
+    public func requestAccessToken(authorizationCode: UnauthorizedRequest, nonce: String?) async -> Result<AuthorizedRequest, Error> {
     switch authorizationCode {
     case .par:
       return .failure(ValidationError.error(reason: ".authorizationCode case is required"))
@@ -289,10 +294,12 @@ public actor Issuer: IssuerType {
             nonce: CNonce?,
             identifiers: AuthorizationDetailsIdentifiers?,
             tokenType: TokenType?,
-            expiresIn: Int?
+            expiresIn: Int?,
+            dpopNonce: DPopNonce
           ) = try await authorizer.requestAccessTokenAuthFlow(
             authorizationCode: authorizationCode,
-            codeVerifier: request.pkceVerifier.codeVerifier
+            codeVerifier: request.pkceVerifier.codeVerifier,
+            nonce: nonce
           ).get()
           
           if let cNonce = response.nonce {
@@ -306,7 +313,8 @@ public actor Issuer: IssuerType {
                 refreshToken: nil,
                 cNonce: cNonce,
                 credentialIdentifiers: response.identifiers,
-                timeStamp: Date().timeIntervalSinceReferenceDate
+                timeStamp: Date().timeIntervalSinceReferenceDate,
+                dpopNonce: response.dpopNonce
               )
             )
           } else {
@@ -468,6 +476,7 @@ public actor Issuer: IssuerType {
         claimSet: claimSet,
         bindingKey: bindingKey,
         cNonce: cNonce(from: proofRequest),
+        dpopNonce: proofRequest.dpopNonce,
         credentialConfigurationIdentifier: credentialConfigurationIdentifier,
         responseEncryptionSpecProvider: responseEncryptionSpecProvider
       )
@@ -481,7 +490,7 @@ public actor Issuer: IssuerType {
   ) async throws -> Result<SubmittedRequest, Error> {
     switch noProofRequest {
     case .noProofRequired(let token, _, _, _):
-      return try await requestIssuance(token: token) {
+      return try await requestIssuance(token: token, dpopNonce: nil) {
         let credentialRequests: [CredentialIssuanceRequest] = try requestPayload.map { identifier in
           guard let supportedCredential = issuerMetadata
             .credentialsSupported[identifier.credentialConfigurationIdentifier] else {
@@ -518,8 +527,8 @@ public actor Issuer: IssuerType {
     responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
   ) async throws -> Result<SubmittedRequest, Error> {
     switch proofRequest {
-    case .proofRequired(let token, _, let cNonce, _, _):
-      return try await requestIssuance(token: token) {
+    case .proofRequired(let token, _, let cNonce, _, _, let dpopNonce):
+      return try await requestIssuance(token: token, dpopNonce: dpopNonce) {
         let credentialRequests: [CredentialIssuanceRequest] = try requestPayload.map { identifier in
           guard let supportedCredential = issuerMetadata
             .credentialsSupported[identifier.credentialConfigurationIdentifier] else {
@@ -559,6 +568,7 @@ private extension Issuer {
   
   private func requestIssuance(
     token: IssuanceAccessToken,
+    dpopNonce: DPopNonce?,
     issuanceRequestSupplier: () throws -> CredentialIssuanceRequest
   ) async throws -> Result<SubmittedRequest, Error> {
     let credentialRequest = try issuanceRequestSupplier()
@@ -567,7 +577,8 @@ private extension Issuer {
       self.deferredResponseEncryptionSpec = encryptionSpec
       let result = try await issuanceRequester.placeIssuanceRequest(
         accessToken: token,
-        request: single
+        request: single,
+        dpopNonce: dpopNonce
       )
       switch result {
       case .success(let response):
@@ -579,7 +590,8 @@ private extension Issuer {
       self.deferredResponseEncryptionSpec = encryptionSpec
       let result = try await issuanceRequester.placeBatchIssuanceRequest(
         accessToken: token,
-        request: credentials
+        request: credentials,
+        dpopNonce: dpopNonce
       )
       switch result {
       case .success(let response):
@@ -661,6 +673,7 @@ private extension Issuer {
     claimSet: ClaimSet?,
     bindingKey: BindingKey? = nil,
     cNonce: CNonce? = nil,
+    dpopNonce: DPopNonce? = nil,
     credentialConfigurationIdentifier: CredentialConfigurationIdentifier,
     responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
   ) async throws -> Result<SubmittedRequest, Error> {
@@ -670,7 +683,7 @@ private extension Issuer {
       throw ValidationError.error(reason: "Invalid Supported credential for requestSingle")
     }
     
-    return try await requestIssuance(token: token) {
+    return try await requestIssuance(token: token, dpopNonce: dpopNonce) {
       return try supportedCredential.toIssuanceRequest(
         requester: issuanceRequester,
         claimSet: claimSet, 
@@ -688,6 +701,7 @@ private extension Issuer {
     token: IssuanceAccessToken,
     bindingKey: BindingKey? = nil,
     cNonce: CNonce? = nil,
+    dpopNonce: DPopNonce? = nil,
     credentialIdentifier: CredentialIdentifier,
     credentialConfigurationIdentifier: CredentialConfigurationIdentifier,
     responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
@@ -698,7 +712,7 @@ private extension Issuer {
       throw ValidationError.error(reason: "Invalid Supported credential for requestSingle")
     }
     
-    return try await requestIssuance(token: token) {
+    return try await requestIssuance(token: token, dpopNonce: dpopNonce) {
       return try supportedCredential.toIssuanceRequest(
         requester: issuanceRequester,
         proof: bindingKey?.toSupportedProof(
@@ -808,7 +822,8 @@ public extension Issuer {
   
   func requestDeferredIssuance(
     proofRequest: AuthorizedRequest,
-    transactionId: TransactionId
+    transactionId: TransactionId,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<DeferredCredentialIssuanceResponse, Error> {
     
     guard let token = proofRequest.accessToken else {
@@ -818,18 +833,21 @@ public extension Issuer {
     return try await deferredIssuanceRequester.placeDeferredCredentialRequest(
       accessToken: token,
       transactionId: transactionId,
-      issuanceResponseEncryptionSpec: deferredResponseEncryptionSpec
+      issuanceResponseEncryptionSpec: deferredResponseEncryptionSpec,
+      dpopNonce: dpopNonce
     )
   }
   
   func notify(
     authorizedRequest: AuthorizedRequest,
-    notificationId: NotificationObject
+    notificationId: NotificationObject,
+    dpopNonce: DPopNonce?
   ) async throws -> Result<Void, Error> {
     
     return try await notifyIssuer.notify(
       authorizedRequest: authorizedRequest,
-      notification: notificationId
+      notification: notificationId,
+      dpopNonce: dpopNonce
     )
   }
 }
