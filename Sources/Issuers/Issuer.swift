@@ -395,7 +395,7 @@ public actor Issuer: IssuerType {
     switch request {
     case .noProofRequired(let token, _, _, _):
       return token
-    case .proofRequired(let token, _, _, _, _):
+    case .proofRequired(let token, _, _, _, _, _):
       return token
     }
   }
@@ -404,7 +404,7 @@ public actor Issuer: IssuerType {
     switch request {
     case .noProofRequired:
       return nil
-    case .proofRequired(_, _, let cnonce, _, _):
+    case .proofRequired(_, _, let cnonce, _, _, _):
       return cnonce
     }
   }

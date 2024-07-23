@@ -39,7 +39,7 @@ public protocol AuthorizationServerClientType {
     authorizationCode: String,
     codeVerifier: String,
     nonce: String?
-  ) async throws -> Result<(IssuanceAccessToken, CNonce?, AuthorizationDetailsIdentifiers?, TokenType?, Int?, DPopNonce?), ValidationError>
+  ) async throws -> Result<(IssuanceAccessToken, CNonce?, AuthorizationDetailsIdentifiers?, TokenType?, Int?, DPopNonce), ValidationError>
   
   func requestAccessTokenPreAuthFlow(
     preAuthorizedCode: String,

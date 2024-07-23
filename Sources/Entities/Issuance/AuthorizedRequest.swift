@@ -47,7 +47,7 @@ public enum AuthorizedRequest {
     refreshToken: IssuanceRefreshToken?,
     cNonce: CNonce,
     credentialIdentifiers: AuthorizationDetailsIdentifiers?,
-    timeStamp: TimeInterval
+    timeStamp: TimeInterval,
     dpopNonce: DPopNonce? = nil
   )
     
@@ -72,7 +72,7 @@ public enum AuthorizedRequest {
     switch self {
     case .noProofRequired(_, _, _, let timeStamp):
       return timeStamp
-    case .proofRequired(_, _, _, _, let timeStamp):
+    case .proofRequired(_, _, _, _, let timeStamp, _):
       return timeStamp
     }
   }
@@ -90,7 +90,7 @@ public enum AuthorizedRequest {
     switch self {
     case .noProofRequired:
       return nil
-    case .proofRequired(let accessToken, _, _, _, _):
+    case .proofRequired(let accessToken, _, _, _, _, _):
       return accessToken
     }
   }
@@ -99,7 +99,7 @@ public enum AuthorizedRequest {
         switch self {
         case .noProofRequired:
             return nil
-        case .proofRequired(_, _, _, _, let dpopNonce):
+        case .proofRequired(_, _, _, _, _, let dpopNonce):
             return dpopNonce
         }
     }
@@ -110,7 +110,7 @@ public extension AuthorizedRequest {
     switch self {
     case .noProofRequired(let accessToken, _, _, _):
       return accessToken
-    case .proofRequired(let accessToken, _, _, _, _):
+    case .proofRequired(let accessToken, _, _, _, _, _):
       return accessToken
     }
   }

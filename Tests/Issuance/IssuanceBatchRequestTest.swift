@@ -100,7 +100,7 @@ class IssuanceBatchRequestTest: XCTestCase {
     
     switch unAuthorized {
     case .success(let authorizationCode):
-      let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode)
+        let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode, nonce: nil)
       
       if case let .success(authorized) = authorizedRequest,
          case let .noProofRequired(token, _, _, _) = authorized {
