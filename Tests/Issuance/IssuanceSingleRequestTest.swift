@@ -102,8 +102,8 @@ class IssuanceSingleRequestTest: XCTestCase {
         let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode, nonce: nil)
       
       if case let .success(authorized) = authorizedRequest,
-         case let .noProofRequired(token, _, _, _) = authorized {
-        XCTAssert(true, "Got access token: \(token)")
+         case let .noProofRequired(request) = authorized {
+        XCTAssert(true, "Got access token: \(request.accessToken)")
         XCTAssert(true, "Is no proof required")
         
         do {
@@ -235,8 +235,8 @@ class IssuanceSingleRequestTest: XCTestCase {
     )
     
     if case let .success(authorized) = unAuthorized,
-       case let .noProofRequired(token, _, _, _) = authorized {
-      XCTAssert(true, "Got access token: \(token)")
+       case let .noProofRequired(request) = authorized {
+      XCTAssert(true, "Got access token: \(request.accessToken)")
       XCTAssert(true, "Is no proof required")
       
       do {
@@ -363,16 +363,16 @@ class IssuanceSingleRequestTest: XCTestCase {
         let authorizedRequest = await issuer.requestAccessToken(authorizationCode: authorizationCode, nonce: nil)
       
       if case let .success(authorized) = authorizedRequest,
-         case let .noProofRequired(token, _, identifiers, _) = authorized {
-        XCTAssert(true, "Got access token: \(token)")
+         case let .noProofRequired(request) = authorized {
+        XCTAssert(true, "Got access token: \(request.accessToken)")
         XCTAssert(true, "Is no proof required")
         
         guard 
-          let value = identifiers?.keys.first?.value,
+          let value = request.credentialIdentifiers?.keys.first?.value,
           let credentialConfigurationIdentifier: CredentialConfigurationIdentifier = try? .init(
           value: value
           ),
-          let credentialIdentifier = identifiers?.values.first?.first
+          let credentialIdentifier = request.credentialIdentifiers?.values.first?.first
         else {
           XCTAssert(false, "Expected credential identifiers")
           return

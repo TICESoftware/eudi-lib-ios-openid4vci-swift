@@ -236,36 +236,37 @@ public actor Issuer: IssuerType {
           clientId: clientId,
           transactionCode: transactionCode
         )
-        
-        switch response {
-        case .success((let accessToken, let nonce, let identifiers, let expiresIn)):
-          if let cNonce = nonce {
-            return .success(
-              .proofRequired(
-                accessToken: try IssuanceAccessToken(
-                  accessToken: accessToken.accessToken,
-                  tokenType: accessToken.tokenType, 
-                  expiresIn: TimeInterval(expiresIn ?? .zero)
-                ),
-                refreshToken: nil,
-                cNonce: cNonce,
-                credentialIdentifiers: identifiers, 
-                timeStamp: Date().timeIntervalSinceReferenceDate
+          
+          switch response {
+          case .success((let accessToken, let nonce, let identifiers, let expiresIn)):
+              if let cNonce = nonce {
+                  return .success(
+                    .proofRequired(
+                        .init(
+                            accessToken: try IssuanceAccessToken(
+                                accessToken: accessToken.accessToken,
+                                tokenType: accessToken.tokenType,
+                                expiresIn: TimeInterval(expiresIn ?? .zero)
+                            ),
+                            refreshToken: nil, cNonce: cNonce,
+                            credentialIdentifiers: identifiers,
+                            timeStamp: Date().timeIntervalSinceReferenceDate)
+                    )
+                  )
+              } else {
+              return .success(
+                .noProofRequired(
+                    .init(
+                        accessToken: try IssuanceAccessToken(
+                            accessToken: accessToken.accessToken,
+                            tokenType: accessToken.tokenType,
+                            expiresIn: TimeInterval(expiresIn ?? .zero)
+                        ),
+                        refreshToken: nil,
+                        credentialIdentifiers: identifiers,
+                        timeStamp: Date().timeIntervalSinceReferenceDate)
+                )
               )
-            )
-          } else {
-            return .success(
-              .noProofRequired(
-                accessToken: try IssuanceAccessToken(
-                  accessToken: accessToken.accessToken,
-                  tokenType: accessToken.tokenType,
-                  expiresIn: TimeInterval(expiresIn ?? .zero)
-                ),
-                refreshToken: nil,
-                credentialIdentifiers: identifiers,
-                timeStamp: Date().timeIntervalSinceReferenceDate
-              )
-            )
           }
         case .failure(let error):
           return .failure(ValidationError.error(reason: error.localizedDescription))
@@ -295,41 +296,43 @@ public actor Issuer: IssuerType {
             identifiers: AuthorizationDetailsIdentifiers?,
             tokenType: TokenType?,
             expiresIn: Int?,
-            dpopNonce: DPopNonce
+            dpopNonce: DPopNonce?
           ) = try await authorizer.requestAccessTokenAuthFlow(
             authorizationCode: authorizationCode,
             codeVerifier: request.pkceVerifier.codeVerifier,
             nonce: nonce
           ).get()
           
-          if let cNonce = response.nonce {
-            return .success(
-              .proofRequired(
-                accessToken: try IssuanceAccessToken(
-                  accessToken: response.accessToken.accessToken,
-                  tokenType: response.tokenType,
-                  expiresIn: TimeInterval(response.expiresIn ?? .zero)
-                ),
-                refreshToken: nil,
-                cNonce: cNonce,
-                credentialIdentifiers: response.identifiers,
-                timeStamp: Date().timeIntervalSinceReferenceDate,
-                dpopNonce: response.dpopNonce
-              )
-            )
+            if let cNonce = response.nonce {
+                return .success(
+                    .proofRequired(
+                        .init(
+                            accessToken: try IssuanceAccessToken(
+                                accessToken: response.accessToken.accessToken,
+                                tokenType: response.tokenType,
+                                expiresIn: TimeInterval(response.expiresIn ?? .zero)
+                            ),
+                            refreshToken: nil,
+                            cNonce: cNonce,
+                            credentialIdentifiers: response.identifiers,
+                            timeStamp: Date().timeIntervalSinceReferenceDate,
+                            dpopNonce: response.dpopNonce)
+                    )
+                )
           } else {
-            return .success(
-              .noProofRequired(
-                accessToken: try IssuanceAccessToken(
-                  accessToken: response.accessToken.accessToken,
-                  tokenType: response.tokenType,
-                  expiresIn: TimeInterval(response.expiresIn ?? .zero)
-                ),
-                refreshToken: nil,
-                credentialIdentifiers: response.identifiers,
-                timeStamp: Date().timeIntervalSinceReferenceDate
+              return .success(
+                .noProofRequired(
+                    .init(
+                        accessToken: try IssuanceAccessToken(
+                            accessToken: response.accessToken.accessToken,
+                            tokenType: response.tokenType,
+                            expiresIn: TimeInterval(response.expiresIn ?? .zero)
+                        ),
+                        refreshToken: nil,
+                        credentialIdentifiers: response.identifiers,
+                        timeStamp: Date().timeIntervalSinceReferenceDate)
+                )
               )
-            )
           }
         } catch {
           return .failure(ValidationError.error(reason: error.localizedDescription))
@@ -393,10 +396,10 @@ public actor Issuer: IssuerType {
   
   private func accessToken(from request: AuthorizedRequest) -> IssuanceAccessToken {
     switch request {
-    case .noProofRequired(let token, _, _, _):
-      return token
-    case .proofRequired(let token, _, _, _, _, _):
-      return token
+    case .noProofRequired(let request):
+      return request.accessToken
+    case .proofRequired(let request):
+      return request.accessToken
     }
   }
   
@@ -404,8 +407,8 @@ public actor Issuer: IssuerType {
     switch request {
     case .noProofRequired:
       return nil
-    case .proofRequired(_, _, let cnonce, _, _, _):
-      return cnonce
+    case .proofRequired(let request):
+      return request.cNonce
     }
   }
   
@@ -489,8 +492,8 @@ public actor Issuer: IssuerType {
     responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
   ) async throws -> Result<SubmittedRequest, Error> {
     switch noProofRequest {
-    case .noProofRequired(let token, _, _, _):
-      return try await requestIssuance(token: token, dpopNonce: nil) {
+    case .noProofRequired(let request):
+     return try await requestIssuance(token: request.accessToken, dpopNonce: nil) {
         let credentialRequests: [CredentialIssuanceRequest] = try requestPayload.map { identifier in
           guard let supportedCredential = issuerMetadata
             .credentialsSupported[identifier.credentialConfigurationIdentifier] else {
@@ -527,8 +530,8 @@ public actor Issuer: IssuerType {
     responseEncryptionSpecProvider: (_ issuerResponseEncryptionMetadata: CredentialResponseEncryption) -> IssuanceResponseEncryptionSpec?
   ) async throws -> Result<SubmittedRequest, Error> {
     switch proofRequest {
-    case .proofRequired(let token, _, let cNonce, _, _, let dpopNonce):
-      return try await requestIssuance(token: token, dpopNonce: dpopNonce) {
+    case .proofRequired(let request):
+        return try await requestIssuance(token: request.accessToken, dpopNonce: request.dpopNonce) {
         let credentialRequests: [CredentialIssuanceRequest] = try requestPayload.map { identifier in
           guard let supportedCredential = issuerMetadata
             .credentialsSupported[identifier.credentialConfigurationIdentifier] else {
@@ -540,7 +543,7 @@ public actor Issuer: IssuerType {
             proof: bindingKey.toSupportedProof(
               issuanceRequester: issuanceRequester,
               credentialSpec: supportedCredential,
-              cNonce: cNonce.value
+              cNonce: request.cNonce.value
             ),
             responseEncryptionSpecProvider: responseEncryptionSpecProvider
           )
