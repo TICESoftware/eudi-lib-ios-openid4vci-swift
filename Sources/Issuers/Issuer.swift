@@ -647,7 +647,7 @@ private extension Issuer {
   }
   
   func scopesAndCredentialConfigurationIds(credentialOffer: CredentialOffer) throws -> ([Scope], [CredentialConfigurationIdentifier]) {
-    var scopes = [Scope]()
+    var scopes = Set<Scope>()
     var configurationIdentifiers = [CredentialConfigurationIdentifier]()
     
     func credentialConfigurationById(id: CredentialConfigurationIdentifier) throws -> CredentialSupported {
@@ -660,7 +660,7 @@ private extension Issuer {
       switch config.authorizeIssuanceConfig {
       case .favorScopes:
         if let scope = credentialConfiguration.getScope() {
-          scopes.append(try Scope(scope))
+          scopes.insert(try Scope(scope))
         } else {
           configurationIdentifiers.append(id)
         }
@@ -668,7 +668,7 @@ private extension Issuer {
         configurationIdentifiers.append(id)
       }
     }
-    return (scopes, configurationIdentifiers)
+    return (Array(scopes), configurationIdentifiers)
   }
   
   func formatBasedRequest(
