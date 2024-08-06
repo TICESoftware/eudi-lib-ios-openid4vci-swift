@@ -55,6 +55,14 @@ public enum AuthorizedRequest {
   case noProofRequired(NoProofRequiredAuthorizedRequest)
   case proofRequired(ProofRequiredAuthorizedRequest)
     
+  public mutating func updateCNonce(_ cNonce: CNonce) {
+    if case let .proofRequired(proofRequiredAuthorizedRequest) = self {
+      var proofRequiredAuthorizedRequest = proofRequiredAuthorizedRequest
+      proofRequiredAuthorizedRequest.cNonce = cNonce
+      self = .proofRequired(proofRequiredAuthorizedRequest)
+    }
+  }
+    
   public func isAccessTokenExpired(clock: TimeInterval) -> Bool {
     guard let timeStamp = self.timeStamp else {
       return true
